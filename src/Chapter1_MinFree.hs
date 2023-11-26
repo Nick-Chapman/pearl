@@ -2,7 +2,7 @@ module Chapter1_MinFree (main) where
 
 import Control.Monad (when)
 import Data.Array.IO (IOArray,newArray,writeArray,readArray)
-import Data.List (sortBy, (\\))
+import Data.List (sortBy, (\\), partition)
 import Data.Ord (comparing)
 import GHC.Int (Int64)
 import System.Clock (TimeSpec(..),getTime,Clock(Monotonic))
@@ -16,6 +16,8 @@ main = do
   exhibit naive_minfree
   putStrLn "array..."
   exhibit array_minfree
+  putStrLn "divide..."
+  exhibit array_divideAndConquer
 
 naive_minfree :: [Int] -> IO Int
 naive_minfree xs = do
@@ -30,13 +32,29 @@ array_minfree xs = do
   let unmarked = [ x | (x,b) <- final, not b ]
   pure $ head unmarked
 
+array_divideAndConquer :: [Int] -> IO Int
+array_divideAndConquer xs0 = do
+  let
+    minFrom :: Int -> (Int,[Int]) -> Int
+    minFrom a (n,xs) = do
+      if (n == 0) then a else do
+        let b = a+1 + n `div` 2
+        let (ys,zs) = partition (< b) xs
+        let ny = length ys
+        if (ny == b - a)
+          then minFrom b (n - ny, zs)
+          else minFrom a (ny, ys)
+  pure $ minFrom 0 (length xs0, xs0)
+
 exhibit :: ([Int] -> IO Int) -> IO ()
 exhibit f = loop 0
   where
-    limit = Nanos (1 * gig) -- 1 second
+    limit = Nanos (300_000_000) -- 0.3 sec
     loop :: Int -> IO ()
     loop n = do
+      -- takes far longer to create the problem instance
       inp <- makeProblemInstance n
+      let !_ = sum inp -- ensure the instance is fully created.
       (nanos,res) <- timed (do !res <- f inp; pure res)
       printf "[%s] instance, n/res=%d\n" (show nanos) (check n res)
       when (nanos < limit) $ loop (2*n+1)
