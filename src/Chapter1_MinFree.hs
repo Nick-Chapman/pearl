@@ -1,35 +1,49 @@
 module Chapter1_MinFree (main) where
 
-import GHC.Int (Int64)
+import Control.Monad (when)
+import Data.Array.IO (IOArray,newArray,writeArray,readArray)
 import Data.List (sortBy, (\\))
 import Data.Ord (comparing)
+import GHC.Int (Int64)
+import System.Clock (TimeSpec(..),getTime,Clock(Monotonic))
 import System.Random (randomRIO)
 import Text.Printf (printf)
-import System.Clock (TimeSpec(..),getTime,Clock(Monotonic))
 
 main :: IO ()
 main = do
   putStrLn "*minfree*"
-  exhibit minfree
+  putStrLn "naive..."
+  exhibit naive_minfree
+  putStrLn "array..."
+  exhibit array_minfree
 
--- naive quadratic algorithm
-minfree :: [Int] -> Int
-minfree xs = head ([0..] \\ xs)
+naive_minfree :: [Int] -> IO Int
+naive_minfree xs = do
+  pure $ head ([0..] \\ xs)
 
-exhibit :: ([Int] -> Int) -> IO ()
-exhibit f = loop 1
+array_minfree :: [Int] -> IO Int
+array_minfree xs = do
+  let size = length xs
+  a :: IOArray Int Bool <- newArray (0,size) False
+  sequence_ [ writeArray a x True | x <- xs, x < size ]
+  final <- sequence [ do b <- readArray a x; pure (x,b) | x <- [0..size] ]
+  let unmarked = [ x | (x,b) <- final, not b ]
+  pure $ head unmarked
+
+exhibit :: ([Int] -> IO Int) -> IO ()
+exhibit f = loop 0
   where
+    limit = Nanos (1 * gig) -- 1 second
     loop :: Int -> IO ()
     loop n = do
       inp <- makeProblemInstance n
-      (nanos,res) <- timed (do let !res = f inp
-                               pure res)
+      (nanos,res) <- timed (do !res <- f inp; pure res)
       printf "[%s] instance, n/res=%d\n" (show nanos) (check n res)
-      loop (2*n)
+      when (nanos < limit) $ loop (2*n+1)
 
 makeProblemInstance :: Int -> IO [Int]
 makeProblemInstance n = do -- where n is the desired result
-  shuffle ([0..n-1] ++ [n+1..2*n]) --2*n elements; n is missing
+  shuffle ([0..n-1] ++ [ n+2*i+1 | i <- [0..n-1] ]) --2*n elements; n is missing
 
 shuffle :: [a] -> IO [a]
 shuffle xs = do
